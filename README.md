@@ -1,55 +1,65 @@
 # cc-windows-update
 
-Windows 上安装和更新 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 的 PowerShell 脚本，解决官方安装方式的代理和进度显示问题。
+> One-line install & update [Claude Code](https://docs.anthropic.com/en/docs/claude-code) on Windows — with proxy support and progress bar.
 
-## 为什么需要这个脚本
+在 Windows 上一行命令安装和更新 Claude Code，支持代理、显示下载进度，告别黑屏等待。
 
-官方安装命令：
+## Quick Start
+
+打开 PowerShell，粘贴运行：
 
 ```powershell
-irm https://claude.ai/install.ps1 | iex
+irm https://raw.githubusercontent.com/ipfred/cc-windows-update/master/cc_update.ps1 | iex
 ```
 
-存在以下问题：
+就这么简单。脚本会引导你完成代理配置、下载、校验、安装的全部流程。
 
-| 问题 | 官方脚本 | 本脚本 |
-|------|---------|--------|
-| 代理支持 | PowerShell 中设置的代理（如 `$env:HTTP_PROXY`）不生效 | 交互式选择代理，通过 curl 原生 `--proxy` 参数传递 |
-| 下载进度 | 无任何进度显示，无法判断是否卡住 | curl 进度条实时显示下载速度和进度 |
-| 下载速度 | 使用 PowerShell 内置下载，速度较慢 | 使用 curl.exe 下载，速度更快 |
-| 更新体验 | `claude update` 同样无代理、无进度 | 统一的安装/更新流程，体验一致 |
+## Pain Points / 解决了什么问题
 
-## 功能特性
+官方安装命令 `irm https://claude.ai/install.ps1 | iex` 在国内网络环境下体验很差：
 
-- **代理支持** - 交互式选择 HTTP 代理或直连，自定义代理端口（默认 7897）
-- **下载进度可视化** - 基于 curl 的进度条，实时显示下载状态
-- **自动版本检测** - 对比本地与远程版本，已是最新则跳过
-- **SHA256 校验** - 下载完成后自动校验文件完整性
-- **智能安装/更新** - 已安装则直接替换二进制文件，未安装则执行全新安装
-- **winget 兼容** - 检测 winget 安装的版本并正确处理
-- **安装兜底机制** - 官方 install 命令失败时，自动回退到复制安装方式
+| | 官方脚本 | cc-windows-update |
+|---|---|---|
+| **代理** | `$env:HTTP_PROXY` 设了也不生效 | 交互式配置，curl `--proxy` 直连生效 |
+| **进度** | 没有任何输出，不知道卡没卡 | curl 进度条，实时显示速度和进度 |
+| **速度** | PowerShell 内置下载，慢 | curl.exe 下载，更快 |
+| **更新** | `claude update` 同样没代理没进度 | 安装和更新统一流程，体验一致 |
+| **校验** | 无 | SHA256 校验，确保文件完整 |
 
-## 使用方法
+## Features
 
-### 安装或更新到最新版本
+- **Proxy Support** — 交互式选择 HTTP 代理或直连，自定义端口（默认 7897，兼容 Clash / v2rayN 等）
+- **Progress Bar** — 基于 curl 的实时进度条，下载状态一目了然
+- **Smart Update** — 自动检测已安装版本，已是最新则跳过，需要更新则直接替换
+- **Integrity Check** — SHA256 校验，下载损坏立即报错
+- **Winget Compatible** — 自动识别 winget 安装的版本并正确处理
+- **Fallback Install** — 官方 install 命令失败时，自动回退到复制安装
+
+## Usage
+
+### 一行命令（推荐）
 
 ```powershell
+irm https://raw.githubusercontent.com/ipfred/cc-windows-update/master/cc_update.ps1 | iex
+```
+
+### 手动下载运行
+
+```powershell
+# 安装或更新到最新版本
 .\cc_update.ps1
-```
 
-### 安装指定版本
-
-```powershell
+# 安装指定版本
 .\cc_update.ps1 1.0.33
-```
 
-### 安装 stable 通道
-
-```powershell
+# 安装 stable 通道
 .\cc_update.ps1 stable
+
+# 安装 latest 通道 不加参数 默认 latest通道
+.\cc_update.ps1 latest
 ```
 
-运行后脚本会交互式引导：
+### 交互流程
 
 ```
 请选择代理类型：
@@ -58,40 +68,37 @@ irm https://claude.ai/install.ps1 | iex
 
 输入选项 [1/2]: 1
 输入代理端口 [默认: 7897]: 7897
+使用代理: http://127.0.0.1:7897
+
+最新版本: 1.0.33
+下载 claude.exe (1.0.33 / win32-x64)...
+下载地址: https://storage.googleapis.com/.../claude.exe
+######################################## 100.0%
+校验通过
+更新完成：1.0.32 -> 1.0.33
 ```
 
-之后自动完成下载、校验、安装/更新全流程。
+## Requirements
 
-## 前置要求
+- Windows 10/11（64 位）
+- PowerShell 5.1+
+- curl.exe（Windows 10 1803+ 自带）
 
-- **Windows 10/11**（64 位）
-- **PowerShell 5.1+**
-- **curl.exe**（Windows 10 1803+ 自带）
+## FAQ
 
-## 工作原理
-
-1. 从 `https://claude.ai/install.ps1` 解析最新的 GCS 存储桶地址
-2. 从存储桶获取最新版本号
-3. 检测本地已安装的 claude.exe 及其版本
-4. 如已是最新版本则退出，否则继续
-5. 获取 manifest.json 并提取目标平台的 SHA256 校验值
-6. 使用 curl.exe 通过代理下载二进制文件（带进度条）
-7. 校验 SHA256 完整性
-8. 已安装则替换文件，未安装则执行 install 命令（失败时回退到复制安装）
-
-## 常见问题
-
-### 执行策略限制
-
-如果遇到 PowerShell 执行策略限制，可以临时绕过：
+<details>
+<summary><b>遇到执行策略限制怎么办？</b></summary>
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\cc_update.ps1
 ```
 
-### 代理端口怎么填
+</details>
 
-填写你本地代理客户端（如 Clash、v2rayN 等）的 HTTP 代理端口，常见默认端口：
+<details>
+<summary><b>代理端口填什么？</b></summary>
+
+填写你本地代理客户端的 HTTP 端口：
 
 | 客户端 | 默认端口 |
 |--------|---------|
@@ -99,16 +106,44 @@ powershell -ExecutionPolicy Bypass -File .\cc_update.ps1
 | v2rayN | 10809 |
 | Shadowsocks | 1080 |
 
-### 安装后找不到 claude 命令
+</details>
 
-如果脚本回退到复制安装方式，需要手动将安装目录加入 PATH：
+<details>
+<summary><b>安装后找不到 claude 命令？</b></summary>
+
+如果脚本回退到复制安装，需要手动将目录加入 PATH：
 
 ```powershell
 [Environment]::SetEnvironmentVariable('PATH', $env:PATH + ';' + "$env:USERPROFILE\.local\bin", 'User')
 ```
 
-然后重新打开终端生效。
+重新打开终端生效。
+
+</details>
+
+## How It Works
+
+```
+获取 install.ps1 → 解析 GCS 存储桶地址
+        ↓
+  查询最新版本号
+        ↓
+ 检测本地已安装版本 → 已是最新？→ 退出
+        ↓
+  下载 manifest.json → 提取 SHA256
+        ↓
+ curl 下载二进制文件（带进度条）
+        ↓
+    SHA256 校验
+        ↓
+ 已安装？→ 替换文件
+ 未安装？→ 执行 install（失败则回退复制）
+```
 
 ## License
 
 MIT
+
+## Star History
+
+如果这个脚本帮到了你，欢迎点个 Star 支持一下。
