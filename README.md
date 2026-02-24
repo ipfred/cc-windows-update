@@ -14,9 +14,13 @@ irm https://raw.githubusercontent.com/ipfred/cc-windows-update/master/cc_update.
 
 就这么简单。脚本会引导你完成代理配置、下载、校验、安装的全部流程。
 
+![alt text](151e26054dccef0bc718714b877a3685.png)
+
 ## Pain Points / 解决了什么问题
 
-官方安装命令 `irm https://claude.ai/install.ps1 | iex` 在国内网络环境下体验很差：
+- claude code 不支持 npm 方式下载更新，官方脚本PowerShell中只能开tun模式使用
+- 官方脚本更新没有进度且下载很慢，windows系统上每次不知道是卡死了，还是在下载更新
+
 
 | | 官方脚本 | cc-windows-update |
 |---|---|---|
@@ -26,7 +30,7 @@ irm https://raw.githubusercontent.com/ipfred/cc-windows-update/master/cc_update.
 | **更新** | `claude update` 同样没代理没进度 | 安装和更新统一流程，体验一致 |
 | **校验** | 无 | SHA256 校验，确保文件完整 |
 
-## Features
+## ⭐Features 亮点
 
 - **Proxy Support** — 交互式选择 HTTP 代理或直连，自定义端口（默认 7897，兼容 Clash / v2rayN 等）
 - **Progress Bar** — 基于 curl 的实时进度条，下载状态一目了然
