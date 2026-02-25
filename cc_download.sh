@@ -384,6 +384,7 @@ elif [[ "$MODE" == "update" ]]; then
     fi
     echo ""
     echo "更新完成：${current_version:+$current_version -> }$latest_version"
+    rm -f "$binary_path" 2>/dev/null || true
 
 elif [[ "$MODE" == "install" ]]; then
 # ════ 安装模式 ════════════════════════════════════════════════════════════════
@@ -479,7 +480,7 @@ elif [[ "$MODE" == "install" ]]; then
         fi
     fi
 
-    # rm -f "$binary_path"
+    rm -f "$binary_path" 2>/dev/null || true
 fi
 
 echo ""

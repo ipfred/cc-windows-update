@@ -321,6 +321,7 @@ if ($Mode -eq "") {
     Write-Host ""
     $updatePrefix = if ($currentVersion) { "$currentVersion -> " } else { "" }
     Write-Host "更新完成：${updatePrefix}$latestVersion"
+    Remove-Item -Force $binaryPath -ErrorAction SilentlyContinue
 
 } elseif ($Mode -eq "install") {
 # ════ 安装模式 ════════════════════════════════════════════════════════════════
@@ -428,6 +429,7 @@ if ($Mode -eq "") {
             }
             Write-Host "安装目标应用完成：$Target"
         }
+        Remove-Item -Force $binaryPath -ErrorAction SilentlyContinue
     } else {
         if ($curlProxy.Count -gt 0) {
             $env:HTTP_PROXY  = $proxyUri
@@ -462,7 +464,7 @@ if ($Mode -eq "") {
             Write-Host "安装完成：$latestVersion"
         }
         Start-Sleep -Seconds 1
-        # if (Test-Path $binaryPath) { try { Remove-Item -Force $binaryPath } catch {} }
+        Remove-Item -Force $binaryPath -ErrorAction SilentlyContinue
     }
 }
 
