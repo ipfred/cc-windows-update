@@ -1,30 +1,43 @@
-param(
-    [Parameter(Position=0)]
-    [string]$Mode = "",      # "" = 下载离线包 | install | update
-
-    [Parameter(Position=1)]
-    [string]$Target = ""     # stable | latest | x.y.z  （install 模式可用）
-)
-
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-# ── 参数验证 ──────────────────────────────────────────────────────────────────
-if ($Mode -notin @("", "install", "update")) {
-    Write-Host "用法: .\cc_download.ps1 [install|update] [stable|latest|VERSION]"
-    Write-Host ""
-    Write-Host "  （无参数）           下载离线安装包到当前目录（支持跨平台）"
-    Write-Host "  install              安装 Claude Code 到当前系统"
-    Write-Host "  install stable       安装 stable 通道"
-    Write-Host "  install 1.0.33       安装指定版本"
-    Write-Host "  update               更新已安装的 Claude Code 到最新版本"
-    exit 1
+# ── 交互式模式选择 ────────────────────────────────────────────────────────────
+$Mode = ""     # "" = download
+$Target = ""
+Write-Host ""
+Write-Host "选择运行模式："
+Write-Host "  1) download  下载离线安装包（默认）"
+Write-Host "  2) install   安装 Claude Code"
+Write-Host "  3) update    更新 Claude Code"
+Write-Host ""
+$modeChoice = Read-Host "输入选项 [1/2/3]"
+switch ($modeChoice) {
+    "2" { $Mode = "install" }
+    "3" { $Mode = "update"  }
+    default { $Mode = ""    }
 }
 
-if ($Mode -eq "install" -and $Target -ne "" -and
-    $Target -notmatch '^(stable|latest|\d+\.\d+\.\d+(-[^\s]+)?)$') {
-    Write-Error "Target 必须是 stable、latest 或版本号（如 1.0.33）"
-    exit 1
+if ($Mode -eq "install") {
+    Write-Host ""
+    Write-Host "选择安装目标："
+    Write-Host "  1) 默认（不指定 Target，默认通道）"
+    Write-Host "  2) latest"
+    Write-Host "  3) stable"
+    Write-Host "  4) 指定版本号（如 1.0.33）"
+    Write-Host ""
+    $targetChoice = Read-Host "输入选项 [1/2/3/4]"
+    switch ($targetChoice) {
+        "2" { $Target = "latest" }
+        "3" { $Target = "stable" }
+        "4" {
+            $Target = Read-Host "输入版本号（如 1.0.33）"
+            if ($Target -notmatch '^\d+\.\d+\.\d+(-[^\s]+)?$') {
+                Write-Error "版本号格式不正确（示例: 1.0.33）"
+                exit 1
+            }
+        }
+        default { $Target = "" }
+    }
 }
 
 # ── 32 位检查（仅 install / update 模式）─────────────────────────────────────
@@ -111,7 +124,7 @@ function Get-ClaudeBinary {
 
 # ════════════════════════════════════════════════════════════════════════════════
 if ($Mode -eq "") {
-# ════ 下载模式（无参数）══════════════════════════════════════════════════════
+# ════ 下载模式 ════════════════════════════════════════════════════════════════
 
     # ── 选择目标平台 ──────────────────────────────────────────────────────────
     $platforms = @(
@@ -224,7 +237,7 @@ if ($Mode -eq "") {
     # ── 检查已安装的 claude ────────────────────────────────────────────────────
     $claudeCmd = Get-Command claude.exe -ErrorAction SilentlyContinue
     if (-not $claudeCmd) {
-        Write-Error "未找到已安装的 claude.exe，请先运行: .\cc_download.ps1 install"
+        Write-Error "未找到已安装的 claude.exe，请重新运行脚本并选择 install 模式。"
         exit 1
     }
 
@@ -400,6 +413,21 @@ if ($Mode -eq "") {
         Write-Host ""
         $updatePrefix = if ($currentVersion) { "$currentVersion -> " } else { "" }
         Write-Host "更新完成：${updatePrefix}$latestVersion"
+        if ($Target) {
+            Write-Host "应用安装目标: $Target"
+            $applyOk = $false
+            try {
+                & $existingPath install $Target
+                if ($LASTEXITCODE -eq 0) { $applyOk = $true }
+            } catch {
+                Write-Host "install $Target 命令异常: $_"
+            }
+            if (-not $applyOk) {
+                Write-Error "应用安装目标失败：$Target"
+                exit 1
+            }
+            Write-Host "安装目标应用完成：$Target"
+        }
     } else {
         if ($curlProxy.Count -gt 0) {
             $env:HTTP_PROXY  = $proxyUri

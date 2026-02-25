@@ -2,30 +2,44 @@
 
 set -e
 
-# ── 参数解析 ──────────────────────────────────────────────────────────────────
-MODE="${1:-}"      # "" = 下载离线包 | install | update
-TARGET="${2:-}"    # stable | latest | x.y.z  （install 模式可用）
+# ── 交互式模式选择 ────────────────────────────────────────────────────────────
+MODE=""
+TARGET=""
+echo ""
+echo "选择运行模式："
+echo "  1) download  下载离线安装包（默认）"
+echo "  2) install   安装 Claude Code"
+echo "  3) update    更新 Claude Code"
+echo ""
+read -r -p "输入选项 [1/2/3]: " mode_choice
 
-print_usage() {
-    echo "用法: $0 [install|update] [stable|latest|VERSION]"
-    echo ""
-    echo "  （无参数）           下载离线安装包到当前目录（支持跨平台）"
-    echo "  install              安装 Claude Code 到当前系统"
-    echo "  install stable       安装 stable 通道"
-    echo "  install 1.0.33       安装指定版本"
-    echo "  update               更新已安装的 Claude Code 到最新版本"
-}
-
-case "$MODE" in
-    ""|install|update) ;;
-    -h|--help) print_usage; exit 0 ;;
-    *) echo "无效命令: $MODE" >&2; echo "" >&2; print_usage >&2; exit 1 ;;
+case "$mode_choice" in
+    2) MODE="install" ;;
+    3) MODE="update" ;;
+    *) MODE="" ;;
 esac
 
-if [[ -n "$TARGET" ]] && [[ "$MODE" == "install" ]] && \
-   [[ ! "$TARGET" =~ ^(stable|latest|[0-9]+\.[0-9]+\.[0-9]+(-[^[:space:]]+)?)$ ]]; then
-    echo "Target 必须是 stable、latest 或版本号（如 1.0.33）" >&2
-    exit 1
+if [[ "$MODE" == "install" ]]; then
+    echo ""
+    echo "选择安装目标："
+    echo "  1) 默认（不指定 Target，默认通道）"
+    echo "  2) latest"
+    echo "  3) stable"
+    echo "  4) 指定版本号（如 1.0.33）"
+    echo ""
+    read -r -p "输入选项 [1/2/3/4]: " target_choice
+    case "$target_choice" in
+        2) TARGET="latest" ;;
+        3) TARGET="stable" ;;
+        4)
+            read -r -p "输入版本号（如 1.0.33）: " TARGET
+            if [[ ! "$TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[^[:space:]]+)?$ ]]; then
+                echo "版本号格式不正确（示例: 1.0.33）" >&2
+                exit 1
+            fi
+            ;;
+        *) TARGET="" ;;
+    esac
 fi
 
 # ── 代理选择 ──────────────────────────────────────────────────────────────────
@@ -194,7 +208,7 @@ fi
 
 # ════════════════════════════════════════════════════════════════════════════════
 if [[ -z "$MODE" ]]; then
-# ════ 下载模式（无参数）══════════════════════════════════════════════════════
+# ════ 下载模式 ════════════════════════════════════════════════════════════════
 
     # ── 选择目标平台 ──────────────────────────────────────────────────────────
     echo ""
@@ -305,7 +319,7 @@ elif [[ "$MODE" == "update" ]]; then
 
     # ── 检查已安装的 claude ────────────────────────────────────────────────────
     if ! command -v claude >/dev/null 2>&1; then
-        echo "未找到已安装的 claude，请先运行: bash $0 install" >&2; exit 1
+        echo "未找到已安装的 claude，请重新运行脚本并选择 install 模式。" >&2; exit 1
     fi
 
     found_path=$(command -v claude)
@@ -438,6 +452,15 @@ elif [[ "$MODE" == "install" ]]; then
         echo ""
         update_prefix="${current_version:+$current_version -> }"
         echo "更新完成：${update_prefix}$latest_version"
+        if [[ -n "$TARGET" ]]; then
+            echo "应用安装目标: $TARGET"
+            if "$existing_path" install "$TARGET"; then
+                echo "安装目标应用完成：$TARGET"
+            else
+                echo "应用安装目标失败：$TARGET" >&2
+                exit 1
+            fi
+        fi
     else
         # ── 运行官方 install 命令 ──────────────────────────────────────────────
         echo ""

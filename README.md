@@ -15,7 +15,7 @@ irm https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.ps1 
 **Linux / macOS**（bash）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.sh | bash -s install
+curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.sh | bash
 ```
 
 脚本会引导你完成代理配置、下载、校验、安装的全部流程。
@@ -49,14 +49,11 @@ curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_downlo
 
 ## Usage
 
-### 命令说明
+### 运行方式
 
 ```
-cc_download[.ps1|.sh]               # 下载离线安装包到当前目录（支持选择任意平台）
-cc_download[.ps1|.sh] install       # 安装 Claude Code 到当前系统
-cc_download[.ps1|.sh] install stable   # 安装 stable 通道
-cc_download[.ps1|.sh] install 1.0.33   # 安装指定版本
-cc_download[.ps1|.sh] update       # 更新已安装的 Claude Code 到最新版本
+cc_download[.ps1|.sh]               # 启动后交互选择模式：download / install / update
+                                    # install 模式可继续选择 target：默认 / latest / stable / 指定版本
 ```
 
 ---
@@ -66,28 +63,18 @@ cc_download[.ps1|.sh] update       # 更新已安装的 Claude Code 到最新版
 **一行命令（推荐）：**
 
 ```powershell
-# 安装
+# 运行后交互选择模式（download / install / update）
 irm https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.ps1 | iex
 
-# 下载离线包（需先下载脚本）
+# 本地脚本同样是交互选择模式
 .\cc_download.ps1
 ```
 
 **手动下载脚本后运行：**
 
 ```powershell
-# 下载离线安装包（选择目标平台和版本）
+# 运行后选择模式与目标
 .\cc_download.ps1
-
-# 安装到当前系统
-.\cc_download.ps1 install
-
-# 更新已安装版本
-.\cc_download.ps1 update
-
-# 安装指定通道 / 版本
-.\cc_download.ps1 install stable
-.\cc_download.ps1 install 1.0.33
 ```
 
 ---
@@ -95,27 +82,32 @@ irm https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.ps1 
 ### Linux / macOS
 
 ```bash
-# 安装
-bash cc_download.sh install
-
-# 更新
-bash cc_download.sh update
-
-# 下载离线安装包（选择目标平台和版本）
+# 运行后交互选择模式与目标
 bash cc_download.sh
-
-# 安装指定通道 / 版本
-bash cc_download.sh install stable
-bash cc_download.sh install 1.0.33
 ```
 
 ---
 
 ### 交互流程示例
 
-**install / update 模式：**
+**统一入口（先选模式）：**
 
 ```
+选择运行模式：
+  1) download  下载离线安装包（默认）
+  2) install   安装 Claude Code
+  3) update    更新 Claude Code
+
+输入选项 [1/2/3]: 2
+
+选择安装目标：
+  1) 默认（不指定 Target，默认通道）
+  2) latest
+  3) stable
+  4) 指定版本号（如 1.0.33）
+
+输入选项 [1/2/3/4]: 3
+
 请选择代理类型：
   1) HTTP 代理（默认）
   2) 不使用代理
@@ -136,9 +128,16 @@ bash cc_download.sh install 1.0.33
 ✅ 完成！
 ```
 
-**下载模式（无参数）：**
+**下载模式（在模式选择中选 download）：**
 
 ```
+选择运行模式：
+  1) download  下载离线安装包（默认）
+  2) install   安装 Claude Code
+  3) update    更新 Claude Code
+
+输入选项 [1/2/3]: 1
+
 选择目标平台：
   1) linux-x64          Linux x64 (glibc)
   2) linux-arm64        Linux ARM64 (glibc)
@@ -192,7 +191,7 @@ bash cc_download.sh install 1.0.33
 <summary><b>Windows 遇到执行策略限制怎么办？</b></summary>
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\cc_download.ps1 install
+powershell -ExecutionPolicy Bypass -File .\cc_download.ps1
 ```
 
 </details>
@@ -290,7 +289,7 @@ sysctl -n sysctl.proc_translated 2>/dev/null
 <details>
 <summary><b>如何在无网络的服务器上安装？</b></summary>
 
-1. 在有网络的机器上运行脚本（无参数进入下载模式），选择目标服务器的平台和版本
+1. 在有网络的机器上运行脚本，选择 `download` 模式后再选择目标服务器的平台和版本
 2. 将下载好的文件上传到服务器
 3. 在服务器上执行：
 
@@ -306,15 +305,16 @@ chmod +x /tmp/claude-1.0.33-linux-x64
 ```
 获取 install.ps1 / install.sh → 解析 GCS 存储桶地址
               ↓
-        ┌─────┴──────┐
-    无参数          install / update
-   下载模式              ↓
-        ↓         查询最新版本号
-  选择目标平台           ↓
-  选择版本通道    检测本地已安装版本
-        ↓         已是最新？→ 退出
-  查询版本号             ↓
-        └─────┬──────┘
+        交互选择模式（download / install / update）
+              ↓
+        ┌─────┴─────────┐
+     download        install / update
+        ↓                 ↓
+  选择目标平台         查询最新版本号
+  选择版本通道             ↓
+      查询版本号      检测本地已安装版本
+        ↓            已是最新？→ 退出
+        └─────┬─────────┘
               ↓
      下载 manifest.json → 提取 SHA256
               ↓
@@ -324,7 +324,7 @@ chmod +x /tmp/claude-1.0.33-linux-x64
               ↓
      ┌────────┴────────┐
   下载模式          install / update
-  存到当前目录      install → 执行 binary install
+  存到当前目录      install → 执行 binary install（可选 target）
   打印离线指引      update  → 替换已安装文件
 ```
 
