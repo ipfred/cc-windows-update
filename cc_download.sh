@@ -462,31 +462,20 @@ elif [[ "$MODE" == "install" ]]; then
             fi
         fi
     else
-        # ── 运行官方 install 命令 ──────────────────────────────────────────────
+        # ── 直接复制到 ~/.local/bin ────────────────────────────────────────────
+        install_dir="$HOME/.local/bin"
+        install_path="$install_dir/claude"
         echo ""
-        echo "正在安装 Claude Code..."
-        install_ok=false
-        if "$binary_path" install ${TARGET:+"$TARGET"}; then
-            install_ok=true
-        fi
-
-        if [ "$install_ok" != "true" ]; then
-            # 回退：复制到 ~/.local/bin
-            fallback_dir="$HOME/.local/bin"
-            fallback_path="$fallback_dir/claude"
-            echo ""
-            echo "install 命令失败，回退安装到 $fallback_path"
-            mkdir -p "$fallback_dir"
-            if cp -f "$binary_path" "$fallback_path"; then
-                echo "复制完成。"
-                echo "请确认 $fallback_dir 已加入 PATH，否则请手动添加："
-                echo "  export PATH=\"\$PATH:$fallback_dir\""
-            else
-                echo "回退复制也失败" >&2
-            fi
-        else
+        echo "正在安装 Claude Code 到 $install_path ..."
+        mkdir -p "$install_dir"
+        if cp -f "$binary_path" "$install_path"; then
             echo ""
             echo "安装完成：$latest_version"
+            echo "请确认 $install_dir 已加入 PATH，否则请手动添加："
+            echo "  export PATH=\"\$PATH:$install_dir\""
+        else
+            echo "安装失败" >&2
+            exit 1
         fi
     fi
 

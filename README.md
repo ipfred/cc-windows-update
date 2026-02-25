@@ -249,11 +249,23 @@ sysctl -n sysctl.proc_translated 2>/dev/null
 
 1. 在有网络的机器上运行脚本，选择 `download` 模式后再选择目标服务器的平台和版本
 2. 将下载好的文件上传到服务器
-3. 在服务器上执行：
+3. 在服务器上手动复制到可执行目录：
 
+**Linux / macOS：**
 ```bash
-chmod +x /tmp/claude-1.0.33-linux-x64
-/tmp/claude-1.0.33-linux-x64 install
+mkdir -p ~/.local/bin
+cp /path/to/claude-1.0.33-linux-x64 ~/.local/bin/claude
+chmod +x ~/.local/bin/claude
+# 若 PATH 中还没有该目录，执行以下命令后重新打开终端
+echo 'export PATH="$PATH:$HOME/.local/bin"' >> ~/.bashrc && source ~/.bashrc
+```
+
+**Windows（PowerShell）：**
+```powershell
+New-Item -ItemType Directory -Force "$env:USERPROFILE\.local\bin"
+Copy-Item .\claude-1.0.33-win32-x64.exe "$env:USERPROFILE\.local\bin\claude.exe"
+# 若 PATH 中还没有该目录，执行以下命令后重新打开终端
+[Environment]::SetEnvironmentVariable('PATH', $env:PATH + ';' + "$env:USERPROFILE\.local\bin", 'User')
 ```
 
 </details>
@@ -282,7 +294,7 @@ chmod +x /tmp/claude-1.0.33-linux-x64
               ↓
      ┌────────┴────────┐
   下载模式          install / update
-  存到当前目录      install → 执行 binary install（可选 target）
+  存到当前目录      install → 复制到 ~/.local/bin（Windows：%USERPROFILE%\.local\bin）
   打印离线指引      update  → 替换已安装文件
 ```
 
