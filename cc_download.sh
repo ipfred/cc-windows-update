@@ -11,7 +11,7 @@ echo "  1) download  下载离线安装包（默认）"
 echo "  2) install   安装 Claude Code"
 echo "  3) update    更新 Claude Code"
 echo ""
-read -r -p "输入选项 [1/2/3]: " mode_choice
+read -r -p "输入选项 [1/2/3]: " mode_choice < /dev/tty
 
 case "$mode_choice" in
     2) MODE="install" ;;
@@ -27,12 +27,12 @@ if [[ "$MODE" == "install" ]]; then
     echo "  3) stable"
     echo "  4) 指定版本号（如 1.0.33）"
     echo ""
-    read -r -p "输入选项 [1/2/3/4]: " target_choice
+    read -r -p "输入选项 [1/2/3/4]: " target_choice < /dev/tty
     case "$target_choice" in
         2) TARGET="latest" ;;
         3) TARGET="stable" ;;
         4)
-            read -r -p "输入版本号（如 1.0.33）: " TARGET
+            read -r -p "输入版本号（如 1.0.33）: " TARGET < /dev/tty
             if [[ ! "$TARGET" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[^[:space:]]+)?$ ]]; then
                 echo "版本号格式不正确（示例: 1.0.33）" >&2
                 exit 1
@@ -48,13 +48,13 @@ echo "请选择代理类型："
 echo "  1) HTTP 代理（默认）"
 echo "  2) 不使用代理"
 echo ""
-read -r -p "输入选项 [1/2]: " type_choice
+read -r -p "输入选项 [1/2]: " type_choice < /dev/tty
 
 PROXY_URL=""
 CURL_PROXY_ARGS=()
 
 if [[ "$type_choice" != "2" ]]; then
-    read -r -p "输入代理端口 [默认: 7897]: " port_input
+    read -r -p "输入代理端口 [默认: 7897]: " port_input < /dev/tty
     port_input="${port_input:-7897}"
     PROXY_URL="http://127.0.0.1:$port_input"
     CURL_PROXY_ARGS=(--proxy "$PROXY_URL")
@@ -222,7 +222,7 @@ if [[ -z "$MODE" ]]; then
     echo "  7) win32-x64          Windows x64"
     echo "  8) win32-arm64        Windows ARM64"
     echo ""
-    read -r -p "输入选项 [1-8]: " platform_choice
+    read -r -p "输入选项 [1-8]: " platform_choice < /dev/tty
 
     IS_WIN=false
     case "$platform_choice" in
@@ -244,12 +244,12 @@ if [[ -z "$MODE" ]]; then
     echo "  2) stable（稳定版）"
     echo "  3) 输入指定版本号"
     echo ""
-    read -r -p "输入选项 [1/2/3]: " channel_choice
+    read -r -p "输入选项 [1/2/3]: " channel_choice < /dev/tty
     channel=""
     case "$channel_choice" in
         2) channel="stable" ;;
         3)
-            read -r -p "输入版本号（如 1.0.33）: " channel
+            read -r -p "输入版本号（如 1.0.33）: " channel < /dev/tty
             [[ ! "$channel" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] && \
                 { echo "版本号格式不正确" >&2; exit 1; }
             ;;
@@ -463,20 +463,36 @@ elif [[ "$MODE" == "install" ]]; then
             fi
         fi
     else
-        # ── 直接复制到 ~/.local/bin ────────────────────────────────────────────
-        install_dir="$HOME/.local/bin"
-        install_path="$install_dir/claude"
+        # ── 先尝试用二进制自带的 install 命令 ─────────────────────────────────
         echo ""
-        echo "正在安装 Claude Code 到 $install_path ..."
-        mkdir -p "$install_dir"
-        if cp -f "$binary_path" "$install_path"; then
+        echo "正在安装 Claude Code..."
+        install_ok=false
+        if [[ -n "$TARGET" ]]; then
+            "$binary_path" install "$TARGET" && install_ok=true || \
+                echo "install $TARGET 命令异常"
+        else
+            "$binary_path" install && install_ok=true || \
+                echo "install 命令异常"
+        fi
+
+        if [[ "$install_ok" != "true" ]]; then
+            # ── 原生 install 失败，回退到手动复制 ────────────────────────────
+            install_dir="$HOME/.local/bin"
+            install_path="$install_dir/claude"
+            echo ""
+            echo "原生 install 命令失败，通过 copy 方式安装到 $install_path"
+            mkdir -p "$install_dir"
+            if cp -f "$binary_path" "$install_path"; then
+                echo "复制完成。"
+                echo "请确认 $install_dir 已加入 PATH，否则请手动添加："
+                echo "  export PATH=\"\$PATH:$install_dir\""
+            else
+                echo "回退复制也失败" >&2
+                exit 1
+            fi
+        else
             echo ""
             echo "安装完成：$latest_version"
-            echo "请确认 $install_dir 已加入 PATH，否则请手动添加："
-            echo "  export PATH=\"\$PATH:$install_dir\""
-        else
-            echo "安装失败" >&2
-            exit 1
         fi
     fi
 
