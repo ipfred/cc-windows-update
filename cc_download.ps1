@@ -325,6 +325,45 @@ if ($Mode -eq "") {
     }
     Write-Host "最新版本: $latestVersion"
 
+    # ── 检查是否已安装 ─────────────────────────────────────────────────────────
+    $existingPath   = $null
+    $currentVersion = $null
+    $claudeCmd = Get-Command claude.exe -ErrorAction SilentlyContinue
+    if ($claudeCmd) {
+        $foundPath = $claudeCmd.Source
+        try {
+            $versionOutput = & $foundPath --version 2>&1 | Out-String
+            $versionMatch  = [regex]::Match($versionOutput, '(\d+\.\d+\.\d+\S*)')
+            if ($versionMatch.Success) { $currentVersion = $versionMatch.Groups[1].Value }
+        } catch {}
+
+        $versionLabel = if ($currentVersion) { $currentVersion } else { "未知版本" }
+
+        if ($foundPath -match '\\WinGet\\') {
+            Write-Host "检测到 winget 安装版本（$versionLabel）"
+            if ($currentVersion -eq $latestVersion) {
+                Write-Host "已是最新版本（$latestVersion），无需操作。"
+            } else {
+                Write-Host "如需更新请使用 winget：  winget upgrade --id Anthropic.Claude"
+            }
+            exit 0
+        }
+
+        Write-Host "已安装位置: $foundPath"
+        Write-Host "当前版本: $versionLabel"
+
+        if ($currentVersion -eq $latestVersion) {
+            Write-Host ""
+            Write-Host "已是最新版本（$latestVersion），无需操作。"
+            exit 0
+        }
+
+        $existingPath = $foundPath
+        if ($currentVersion) { Write-Host "需要更新: $currentVersion -> $latestVersion" }
+    } else {
+        Write-Host "未检测到已安装的 claude.exe，将执行全新安装。"
+    }
+
     # ── 获取 manifest & checksum ──────────────────────────────────────────────
     Write-Host ""
     Write-Host "获取版本清单..."
@@ -341,43 +380,62 @@ if ($Mode -eq "") {
                      -Checksum $checksum -Label "claude.exe ($latestVersion / $platform)" `
                      -Proxy $curlProxy
 
-    # ── 运行官方 install 命令 ──────────────────────────────────────────────────
-    if ($curlProxy.Count -gt 0) {
-        $env:HTTP_PROXY  = $proxyUri
-        $env:HTTPS_PROXY = $proxyUri
-    }
-    Write-Host ""
-    Write-Host "正在安装 Claude Code..."
-    $installOk = $false
-    try {
-        if ($Target) { & $binaryPath install $Target } else { & $binaryPath install }
-        if ($LASTEXITCODE -eq 0) { $installOk = $true }
-    } catch {
-        Write-Host "install 命令异常: $_"
-    }
-
-    if (-not $installOk) {
-        # 回退：复制到 ~/.local/bin
-        $fallbackDir  = "$env:USERPROFILE\.local\bin"
-        $fallbackPath = "$fallbackDir\claude.exe"
+    # ── 已安装：直接替换；未安装：运行 install 命令 ────────────────────────────
+    if ($existingPath) {
         Write-Host ""
-        Write-Host "原生 install 命令失败，通过 copy 方式安装到 $fallbackPath"
+        Write-Host "替换: $existingPath"
+        $bakPath = "$existingPath.old"
         try {
-            New-Item -ItemType Directory -Force -Path $fallbackDir | Out-Null
-            Copy-Item -Force $binaryPath $fallbackPath
-            Write-Host "复制完成。"
-            Write-Host "请确认 $fallbackDir 已加入 PATH，否则请手动添加："
-            Write-Host "  [Environment]::SetEnvironmentVariable('PATH', `$env:PATH + ';$fallbackDir', 'User')"
+            if (Test-Path $bakPath) { Remove-Item -Force $bakPath -ErrorAction SilentlyContinue }
+            Move-Item -Force $existingPath $bakPath
+            Copy-Item -Force $binaryPath $existingPath
+            Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
         } catch {
-            Write-Error "回退复制也失败: $_"
+            if (-not (Test-Path $existingPath) -and (Test-Path $bakPath)) {
+                Move-Item -Force $bakPath $existingPath
+                Write-Host "已回滚到旧版本。"
+            }
+            Write-Error "替换失败: $_"; exit 1
         }
-    } else {
         Write-Host ""
-        Write-Host "安装完成：$latestVersion"
-    }
+        $updatePrefix = if ($currentVersion) { "$currentVersion -> " } else { "" }
+        Write-Host "更新完成：${updatePrefix}$latestVersion"
+    } else {
+        if ($curlProxy.Count -gt 0) {
+            $env:HTTP_PROXY  = $proxyUri
+            $env:HTTPS_PROXY = $proxyUri
+        }
+        Write-Host ""
+        Write-Host "正在安装 Claude Code..."
+        $installOk = $false
+        try {
+            if ($Target) { & $binaryPath install $Target } else { & $binaryPath install }
+            if ($LASTEXITCODE -eq 0) { $installOk = $true }
+        } catch {
+            Write-Host "install 命令异常: $_"
+        }
 
-    Start-Sleep -Seconds 1
-    # if (Test-Path $binaryPath) { try { Remove-Item -Force $binaryPath } catch {} }
+        if (-not $installOk) {
+            $fallbackDir  = "$env:USERPROFILE\.local\bin"
+            $fallbackPath = "$fallbackDir\claude.exe"
+            Write-Host ""
+            Write-Host "原生 install 命令失败，通过 copy 方式安装到 $fallbackPath"
+            try {
+                New-Item -ItemType Directory -Force -Path $fallbackDir | Out-Null
+                Copy-Item -Force $binaryPath $fallbackPath
+                Write-Host "复制完成。"
+                Write-Host "请确认 $fallbackDir 已加入 PATH，否则请手动添加："
+                Write-Host "  [Environment]::SetEnvironmentVariable('PATH', `$env:PATH + ';$fallbackDir', 'User')"
+            } catch {
+                Write-Error "回退复制也失败: $_"
+            }
+        } else {
+            Write-Host ""
+            Write-Host "安装完成：$latestVersion"
+        }
+        Start-Sleep -Seconds 1
+        # if (Test-Path $binaryPath) { try { Remove-Item -Force $binaryPath } catch {} }
+    }
 }
 
 Write-Host ""

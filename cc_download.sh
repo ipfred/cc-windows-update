@@ -385,6 +385,27 @@ elif [[ "$MODE" == "install" ]]; then
     [[ -z "$latest_version" ]] && { echo "获取最新版本号失败" >&2; exit 1; }
     echo "最新版本: $latest_version"
 
+    # ── 检查是否已安装 ─────────────────────────────────────────────────────────
+    existing_path=""
+    current_version=""
+    if command -v claude >/dev/null 2>&1; then
+        found_path=$(command -v claude)
+        version_output=$(claude --version 2>&1 || true)
+        [[ "$version_output" =~ ([0-9]+\.[0-9]+\.[0-9]+[^[:space:]]*) ]] && \
+            current_version="${BASH_REMATCH[1]}"
+        echo "已安装位置: $found_path"
+        echo "当前版本: ${current_version:-未知}"
+        if [[ "$current_version" == "$latest_version" ]]; then
+            echo ""
+            echo "已是最新版本（$latest_version），无需操作。"
+            exit 0
+        fi
+        existing_path="$found_path"
+        [[ -n "$current_version" ]] && echo "需要更新: $current_version -> $latest_version"
+    else
+        echo "未检测到已安装的 claude，将执行全新安装。"
+    fi
+
     # ── 获取 manifest & checksum ──────────────────────────────────────────────
     echo ""
     echo "获取版本清单..."
@@ -399,31 +420,51 @@ elif [[ "$MODE" == "install" ]]; then
                   "claude ($latest_version / $platform)" || exit 1
     chmod +x "$binary_path"
 
-    # ── 运行官方 install 命令 ──────────────────────────────────────────────────
-    echo ""
-    echo "正在安装 Claude Code..."
-    install_ok=false
-    if "$binary_path" install ${TARGET:+"$TARGET"}; then
-        install_ok=true
-    fi
-
-    if [ "$install_ok" != "true" ]; then
-        # 回退：复制到 ~/.local/bin
-        fallback_dir="$HOME/.local/bin"
-        fallback_path="$fallback_dir/claude"
+    # ── 已安装：直接替换；未安装：运行 install 命令 ────────────────────────────
+    if [[ -n "$existing_path" ]]; then
         echo ""
-        echo "install 命令失败，回退安装到 $fallback_path"
-        mkdir -p "$fallback_dir"
-        if cp -f "$binary_path" "$fallback_path"; then
-            echo "复制完成。"
-            echo "请确认 $fallback_dir 已加入 PATH，否则请手动添加："
-            echo "  export PATH=\"\$PATH:$fallback_dir\""
-        else
-            echo "回退复制也失败" >&2
+        echo "替换: $existing_path"
+        bak_path="${existing_path}.old"
+        rm -f "$bak_path" 2>/dev/null || true
+        if ! mv "$existing_path" "$bak_path"; then
+            echo "重命名旧文件失败" >&2; exit 1
         fi
-    else
+        if cp -f "$binary_path" "$existing_path"; then
+            rm -f "$bak_path" 2>/dev/null || true
+        else
+            mv "$bak_path" "$existing_path"
+            echo "替换失败，已回滚到旧版本。" >&2; exit 1
+        fi
         echo ""
-        echo "安装完成：$latest_version"
+        update_prefix="${current_version:+$current_version -> }"
+        echo "更新完成：${update_prefix}$latest_version"
+    else
+        # ── 运行官方 install 命令 ──────────────────────────────────────────────
+        echo ""
+        echo "正在安装 Claude Code..."
+        install_ok=false
+        if "$binary_path" install ${TARGET:+"$TARGET"}; then
+            install_ok=true
+        fi
+
+        if [ "$install_ok" != "true" ]; then
+            # 回退：复制到 ~/.local/bin
+            fallback_dir="$HOME/.local/bin"
+            fallback_path="$fallback_dir/claude"
+            echo ""
+            echo "install 命令失败，回退安装到 $fallback_path"
+            mkdir -p "$fallback_dir"
+            if cp -f "$binary_path" "$fallback_path"; then
+                echo "复制完成。"
+                echo "请确认 $fallback_dir 已加入 PATH，否则请手动添加："
+                echo "  export PATH=\"\$PATH:$fallback_dir\""
+            else
+                echo "回退复制也失败" >&2
+            fi
+        else
+            echo ""
+            echo "安装完成：$latest_version"
+        fi
     fi
 
     # rm -f "$binary_path"
