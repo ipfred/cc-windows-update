@@ -2,7 +2,7 @@
 
 > Download, install & update [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with proxy support and progress bar — on Windows, Linux and macOS.
 
-在 Windows / Linux / macOS 上安装和更新 Claude Code，支持代理、显示下载进度，并支持下载离线安装包上传到无网络的服务器。
+在 Windows / Linux / macOS 上安装和更新 Claude Code，支持代理、显示下载进度，并支持下载离线安装包安装到无网络的服务器。
 
 ## Quick Start
 
@@ -26,7 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_downlo
 
 - Claude Code 不支持 npm 方式下载更新，官方脚本在 Windows 上只能开 tun 模式使用
 - 官方脚本更新没有进度且下载很慢，每次不知道是卡死了还是在下载
-- 在没有公网的服务器上无法直接安装，需要手动下载再传输
+- 没有公网的服务器上无法直接安装，官方没有离线下载安装包的方式
 
 | | 官方脚本 | cc-download |
 |---|---|---|
@@ -35,17 +35,6 @@ curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_downlo
 | **进度** | 没有任何输出，不知道卡没卡 | curl 进度条，实时显示速度和进度 |
 | **离线** | 不支持 | 下载任意平台安装包，上传服务器离线安装 |
 | **校验** | 无 | SHA256 校验，确保文件完整 |
-
-## ⭐ Features 亮点
-
-- **Proxy Support** — 交互式选择 HTTP 代理或直连，自定义端口（默认 7897，兼容 Clash / v2rayN 等）
-- **Progress Bar** — 基于 curl 的实时进度条，下载状态一目了然
-- **Offline Download** — 下载任意平台的安装包到本地，用于上传服务器离线安装
-- **Cross-platform** — `cc_download.ps1` 覆盖 Windows，`cc_download.sh` 覆盖 Linux / macOS
-- **Smart Update** — 检测已安装版本，已是最新则跳过，需要更新则直接替换
-- **Integrity Check** — SHA256 校验，下载损坏立即报错
-- **Winget Compatible** — 自动识别 winget 安装的版本并正确处理
-- **Fallback Install** — 官方 install 命令失败时，自动回退到复制安装
 
 ## Usage
 
@@ -131,13 +120,6 @@ bash cc_download.sh
 **下载模式（在模式选择中选 download）：**
 
 ```
-选择运行模式：
-  1) download  下载离线安装包（默认）
-  2) install   安装 Claude Code
-  3) update    更新 Claude Code
-
-输入选项 [1/2/3]: 1
-
 选择目标平台：
   1) linux-x64          Linux x64 (glibc)
   2) linux-arm64        Linux ARM64 (glibc)
@@ -148,30 +130,6 @@ bash cc_download.sh
   7) win32-x64          Windows x64
   8) win32-arm64        Windows ARM64
 
-输入选项 [1-8]: 1
-
-选择版本通道：
-  1) latest（最新版，默认）
-  2) stable（稳定版）
-  3) 输入指定版本号
-
-输入选项 [1/2/3]: 1
-版本: 1.0.33
-
-下载 claude-1.0.33-linux-x64...
-######################################## 100.0%
-校验通过
-
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- 文件已下载: claude-1.0.33-linux-x64  (58341 KB)
- 保存位置:   /Users/you/claude-1.0.33-linux-x64
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
- 离线安装方法：
-
-   1. 将 claude-1.0.33-linux-x64 上传到目标服务器（如 /tmp/）
-   2. 授予执行权限并安装：
-        chmod +x /tmp/claude-1.0.33-linux-x64 && /tmp/claude-1.0.33-linux-x64 install
 ```
 
 ## Requirements
