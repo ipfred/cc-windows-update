@@ -141,7 +141,7 @@ if ($Mode -eq "") {
     Write-Host ""
     Write-Host "选择目标平台："
     foreach ($p in $platforms) {
-        Write-Host ("  {0}) {1,-22} {2}" -f $p.Id, $p.Name, $p.Label)
+        Write-Host ("  " + $p.Id + ") " + $p.Name.PadRight(22) + " " + $p.Label)
     }
     Write-Host ""
     $platformInput = Read-Host "输入选项 [1-8]"
@@ -301,8 +301,13 @@ if ($Mode -eq "") {
     Write-Host "替换: $foundPath"
     $bakPath = "$foundPath.old"
     try {
-        # 清理上次残留备份
-        if (Test-Path $bakPath) { Remove-Item -Force $bakPath -ErrorAction SilentlyContinue }
+        # 清理上次残留备份；若被旧进程占用无法删除，改用带时间戳的备份名
+        if (Test-Path $bakPath) {
+            Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
+            if (Test-Path $bakPath) {
+                $bakPath = "$foundPath.$(Get-Date -Format 'yyyyMMdd_HHmmss').old"
+            }
+        }
         # 重命名旧 exe（进程运行中也可以重命名）
         Move-Item -Force $foundPath $bakPath
         # 写入新 exe
@@ -400,7 +405,13 @@ if ($Mode -eq "") {
         Write-Host "替换: $existingPath"
         $bakPath = "$existingPath.old"
         try {
-            if (Test-Path $bakPath) { Remove-Item -Force $bakPath -ErrorAction SilentlyContinue }
+            # 清理上次残留备份；若被旧进程占用无法删除，改用带时间戳的备份名
+            if (Test-Path $bakPath) {
+                Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
+                if (Test-Path $bakPath) {
+                    $bakPath = "$existingPath.$(Get-Date -Format 'yyyyMMdd_HHmmss').old"
+                }
+            }
             Move-Item -Force $existingPath $bakPath
             Copy-Item -Force $binaryPath $existingPath
             Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
