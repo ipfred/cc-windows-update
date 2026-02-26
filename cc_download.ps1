@@ -1,5 +1,4 @@
-﻿Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 
 # ── 交互式模式选择 ────────────────────────────────────────────────────────────
 $Mode = ""     # "" = download
@@ -123,20 +122,52 @@ function Get-ClaudeBinary {
     Write-Host "校验通过"
 }
 
+# ── 清理残留 .old 文件（未被进程占用的）──────────────────────────────────────
+function Remove-OldBackups {
+    param([string]$BasePath)
+    $dir  = Split-Path $BasePath -Parent
+    $name = Split-Path $BasePath -Leaf
+    Get-ChildItem -Path $dir -Filter "$name.old" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -Path $dir -Filter "$name.*.old" -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+}
+
+# ── mv+cp 替换（允许对运行中 exe 重命名）──────────────────────────────────────
+function Replace-Binary {
+    param([string]$TargetPath, [string]$SourcePath)
+    $bakPath = "$TargetPath.old"
+    if (Test-Path $bakPath) {
+        $bakPath = "$TargetPath.$(Get-Date -Format 'yyyyMMdd_HHmmss').old"
+    }
+    try {
+        Move-Item -Force $TargetPath $bakPath
+        Copy-Item -Force $SourcePath $TargetPath
+        Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
+    }
+    catch {
+        if (-not (Test-Path $TargetPath) -and (Test-Path $bakPath)) {
+            Move-Item -Force $bakPath $TargetPath
+            Write-Host "已回滚到旧版本。"
+        }
+        Write-Error "替换失败: $_"; exit 1
+    }
+}
+
 # ════════════════════════════════════════════════════════════════════════════════
 if ($Mode -eq "") {
-    # ════ 下载模式 ════════════════════════════════════════════════════════════════
+# ════ 下载模式 ════════════════════════════════════════════════════════════════
 
     # ── 选择目标平台 ──────────────────────────────────────────────────────────
     $platforms = @(
-        [pscustomobject]@{ Id = 1; Name = "linux-x64"; Label = "Linux x64 (glibc)"; IsWin = $false }
-        [pscustomobject]@{ Id = 2; Name = "linux-arm64"; Label = "Linux ARM64 (glibc)"; IsWin = $false }
-        [pscustomobject]@{ Id = 3; Name = "linux-x64-musl"; Label = "Linux x64 (musl/Alpine)"; IsWin = $false }
-        [pscustomobject]@{ Id = 4; Name = "linux-arm64-musl"; Label = "Linux ARM64 (musl/Alpine)"; IsWin = $false }
-        [pscustomobject]@{ Id = 5; Name = "darwin-x64"; Label = "macOS x64 (Intel)"; IsWin = $false }
-        [pscustomobject]@{ Id = 6; Name = "darwin-arm64"; Label = "macOS ARM64 (Apple Silicon)"; IsWin = $false }
-        [pscustomobject]@{ Id = 7; Name = "win32-x64"; Label = "Windows x64"; IsWin = $true }
-        [pscustomobject]@{ Id = 8; Name = "win32-arm64"; Label = "Windows ARM64"; IsWin = $true }
+        [pscustomobject]@{ Id = 1; Name = "linux-x64";       Label = "Linux x64 (glibc)";         IsWin = $false }
+        [pscustomobject]@{ Id = 2; Name = "linux-arm64";     Label = "Linux ARM64 (glibc)";        IsWin = $false }
+        [pscustomobject]@{ Id = 3; Name = "linux-x64-musl";  Label = "Linux x64 (musl/Alpine)";   IsWin = $false }
+        [pscustomobject]@{ Id = 4; Name = "linux-arm64-musl";Label = "Linux ARM64 (musl/Alpine)"; IsWin = $false }
+        [pscustomobject]@{ Id = 5; Name = "darwin-x64";      Label = "macOS x64 (Intel)";         IsWin = $false }
+        [pscustomobject]@{ Id = 6; Name = "darwin-arm64";    Label = "macOS ARM64 (Apple Silicon)";IsWin = $false }
+        [pscustomobject]@{ Id = 7; Name = "win32-x64";       Label = "Windows x64";               IsWin = $true  }
+        [pscustomobject]@{ Id = 8; Name = "win32-arm64";     Label = "Windows ARM64";              IsWin = $true  }
     )
 
     Write-Host ""
@@ -146,7 +177,11 @@ if ($Mode -eq "") {
     }
     Write-Host ""
     $platformInput = Read-Host "输入选项 [1-8]"
-    $selPlatform = $platforms | Where-Object { $_.Id -eq [int]$platformInput }
+    $platformId = 0
+    if (-not [int]::TryParse($platformInput, [ref]$platformId)) {
+        Write-Error "请输入 1-8 之间的数字"; exit 1
+    }
+    $selPlatform = $platforms | Where-Object { $_.Id -eq $platformId }
     if (-not $selPlatform) { Write-Error "无效的选项"; exit 1 }
 
     # ── 选择版本通道 ───────────────────────────────────────────────────────────
@@ -187,20 +222,20 @@ if ($Mode -eq "") {
     Write-Host "获取版本清单..."
     $manifestJson = curl.exe -s @curlProxy "$GCS_BUCKET/$version/manifest.json"
     if ($LASTEXITCODE -ne 0) { Write-Error "获取 manifest.json 失败"; exit 1 }
-    $manifest = $manifestJson | ConvertFrom-Json
-    $checksum = $manifest.platforms.($selPlatform.Name).checksum
-    if (-not $checksum) { Write-Error "平台 $($selPlatform.Name) 未在 manifest 中找到"; exit 1 }
+    $manifest  = $manifestJson | ConvertFrom-Json
+    $platProp  = $manifest.platforms.PSObject.Properties[$selPlatform.Name]
+    if (-not $platProp) { Write-Error "平台 $($selPlatform.Name) 未在 manifest 中找到"; exit 1 }
+    $checksum  = $platProp.Value.checksum
 
     # ── 下载或复用缓存（当前目录）─────────────────────────────────────────────
-    $ext = if ($selPlatform.IsWin) { ".exe" } else { "" }
-    $remoteBin = if ($selPlatform.IsWin) { "claude.exe" } else { "claude" }
+    $ext        = if ($selPlatform.IsWin) { ".exe" } else { "" }
+    $remoteBin  = if ($selPlatform.IsWin) { "claude.exe" } else { "claude" }
     $binaryName = "claude-$version-$($selPlatform.Name)$ext"
     $outputPath = Join-Path (Get-Location) $binaryName
-    $downloadUrl = "$GCS_BUCKET/$version/$($selPlatform.Name)/$remoteBin"
+    $downloadUrl= "$GCS_BUCKET/$version/$($selPlatform.Name)/$remoteBin"
     Write-Host "保存目录: $(Get-Location)"
     Get-ClaudeBinary -BinaryPath $outputPath -DownloadUrl $downloadUrl `
-        -Checksum $checksum -Label $binaryName `
-        -Proxy $curlProxy
+        -Checksum $checksum -Label $binaryName -Proxy $curlProxy
 
     $fileSizeMB = [math]::Round((Get-Item $outputPath).Length / 1MB, 1)
 
@@ -215,28 +250,23 @@ if ($Mode -eq "") {
     Write-Host ""
     if ($selPlatform.IsWin) {
         Write-Host "   1. 将 $binaryName 复制到目标 Windows 机器"
-        Write-Host "   2. 在 PowerShell 或 CMD 中运行："
-        Write-Host "        .\$binaryName install"
-        Write-Host ""
-        Write-Host "   可选：指定通道"
-        Write-Host "        .\$binaryName install stable"
-        Write-Host "        .\$binaryName install latest"
+        Write-Host "   2. 在 PowerShell 中运行："
+        Write-Host "        New-Item -ItemType Directory -Force `"`$env:USERPROFILE\.local\bin`""
+        Write-Host "        Copy-Item .\$binaryName `"`$env:USERPROFILE\.local\bin\claude.exe`""
     }
     else {
         Write-Host "   1. 将 $binaryName 上传到目标服务器（如 /tmp/）"
-        Write-Host "   2. 授予执行权限并安装："
-        Write-Host "        chmod +x /tmp/$binaryName && /tmp/$binaryName install"
-        Write-Host ""
-        Write-Host "   可选：指定通道"
-        Write-Host "        /tmp/$binaryName install stable"
-        Write-Host "        /tmp/$binaryName install latest"
+        Write-Host "   2. 复制到可执行目录："
+        Write-Host "        mkdir -p ~/.local/bin"
+        Write-Host "        cp /tmp/$binaryName ~/.local/bin/claude"
+        Write-Host "        chmod +x ~/.local/bin/claude"
     }
     Write-Host ""
     Write-Host "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 }
 elseif ($Mode -eq "update") {
-    # ════ 更新模式 ════════════════════════════════════════════════════════════════
+# ════ 更新模式 ════════════════════════════════════════════════════════════════
 
     # ── 检查已安装的 claude ────────────────────────────────────────────────────
     $claudeCmd = Get-Command claude.exe -ErrorAction SilentlyContinue
@@ -255,14 +285,10 @@ elseif ($Mode -eq "update") {
     $currentVersion = $null
     try {
         $versionOutput = & $foundPath --version 2>&1 | Out-String
-        $versionMatch = [regex]::Match($versionOutput, '(\d+\.\d+\.\d+\S*)')
+        $versionMatch  = [regex]::Match($versionOutput, '(\d+\.\d+\.\d+\S*)')
         if ($versionMatch.Success) { $currentVersion = $versionMatch.Groups[1].Value }
     }
     catch {}
-
-    # 清理未被占用的残留 .old 备份文件（被占用的会静默跳过）
-    Get-Item "$foundPath.old", "$foundPath.*.old" -ErrorAction SilentlyContinue |
-    Remove-Item -Force -ErrorAction SilentlyContinue
 
     Write-Host "已安装位置: $foundPath"
     Write-Host "当前版本: $(if ($currentVersion) { $currentVersion } else { '未知' })"
@@ -283,7 +309,7 @@ elseif ($Mode -eq "update") {
 
     # ── 平台 & 下载目录 ────────────────────────────────────────────────────────
     $platform = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "win32-arm64" } else { "win32-x64" }
-    $dlDir = "$env:USERPROFILE\.claude\downloads"
+    $dlDir    = "$env:USERPROFILE\.claude\downloads"
     New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
     Write-Host "下载目录: $dlDir"
 
@@ -292,41 +318,24 @@ elseif ($Mode -eq "update") {
     Write-Host "获取版本清单..."
     $manifestJson = curl.exe -s @curlProxy "$GCS_BUCKET/$latestVersion/manifest.json"
     if ($LASTEXITCODE -ne 0) { Write-Error "获取 manifest.json 失败"; exit 1 }
-    $manifest = $manifestJson | ConvertFrom-Json
-    $checksum = $manifest.platforms.$platform.checksum
-    if (-not $checksum) { Write-Error "平台 $platform 未在 manifest 中找到"; exit 1 }
+    $manifest  = $manifestJson | ConvertFrom-Json
+    $platProp  = $manifest.platforms.PSObject.Properties[$platform]
+    if (-not $platProp) { Write-Error "平台 $platform 未在 manifest 中找到"; exit 1 }
+    $checksum  = $platProp.Value.checksum
 
     # ── 下载或复用缓存 ─────────────────────────────────────────────────────────
-    $binaryPath = "$dlDir\claude-$latestVersion-$platform.exe"
+    $binaryPath  = "$dlDir\claude-$latestVersion-$platform.exe"
     $downloadUrl = "$GCS_BUCKET/$latestVersion/$platform/claude.exe"
     Get-ClaudeBinary -BinaryPath $binaryPath -DownloadUrl $downloadUrl `
         -Checksum $checksum -Label "claude.exe ($latestVersion / $platform)" `
         -Proxy $curlProxy
 
-    # ── 检查进程并替换 ─────────────────────────────────────────────────────────
+    # ── 清理残留备份并替换 ─────────────────────────────────────────────────────
     Write-Host ""
     Write-Host "替换: $foundPath"
-    $bakPath = "$foundPath.old"
-    try {
-        # 若 .old 仍存在（被旧进程占用），改用带时间戳的备份名
-        if (Test-Path $bakPath) {
-            $bakPath = "$foundPath.$(Get-Date -Format 'yyyyMMdd_HHmmss').old"
-        }
-        # 重命名旧 exe（进程运行中也可以重命名）
-        Move-Item -Force $foundPath $bakPath
-        # 写入新 exe
-        Copy-Item -Force $binaryPath $foundPath
-        # 尝试清理备份
-        Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
-    }
-    catch {
-        # 若复制失败，尝试回滚
-        if (-not (Test-Path $foundPath) -and (Test-Path $bakPath)) {
-            Move-Item -Force $bakPath $foundPath
-            Write-Host "已回滚到旧版本。"
-        }
-        Write-Error "替换失败: $_"; exit 1
-    }
+    Remove-OldBackups -BasePath $foundPath
+    Replace-Binary -TargetPath $foundPath -SourcePath $binaryPath
+
     Write-Host ""
     $updatePrefix = if ($currentVersion) { "$currentVersion -> " } else { "" }
     Write-Host "更新完成：${updatePrefix}$latestVersion"
@@ -334,11 +343,11 @@ elseif ($Mode -eq "update") {
 
 }
 elseif ($Mode -eq "install") {
-    # ════ 安装模式 ════════════════════════════════════════════════════════════════
+# ════ 安装模式 ════════════════════════════════════════════════════════════════
 
     # ── 平台 & 下载目录 ────────────────────────────────────────────────────────
     $platform = if ($env:PROCESSOR_ARCHITECTURE -eq "ARM64") { "win32-arm64" } else { "win32-x64" }
-    $dlDir = "$env:USERPROFILE\.claude\downloads"
+    $dlDir    = "$env:USERPROFILE\.claude\downloads"
     New-Item -ItemType Directory -Force -Path $dlDir | Out-Null
     Write-Host "下载目录: $dlDir"
 
@@ -350,14 +359,14 @@ elseif ($Mode -eq "install") {
     Write-Host "最新版本: $latestVersion"
 
     # ── 检查是否已安装 ─────────────────────────────────────────────────────────
-    $existingPath = $null
+    $existingPath   = $null
     $currentVersion = $null
     $claudeCmd = Get-Command claude.exe -ErrorAction SilentlyContinue
     if ($claudeCmd) {
         $foundPath = $claudeCmd.Source
         try {
             $versionOutput = & $foundPath --version 2>&1 | Out-String
-            $versionMatch = [regex]::Match($versionOutput, '(\d+\.\d+\.\d+\S*)')
+            $versionMatch  = [regex]::Match($versionOutput, '(\d+\.\d+\.\d+\S*)')
             if ($versionMatch.Success) { $currentVersion = $versionMatch.Groups[1].Value }
         }
         catch {}
@@ -396,65 +405,33 @@ elseif ($Mode -eq "install") {
     Write-Host "获取版本清单..."
     $manifestJson = curl.exe -s @curlProxy "$GCS_BUCKET/$latestVersion/manifest.json"
     if ($LASTEXITCODE -ne 0) { Write-Error "获取 manifest.json 失败"; exit 1 }
-    $manifest = $manifestJson | ConvertFrom-Json
-    $checksum = $manifest.platforms.$platform.checksum
-    if (-not $checksum) { Write-Error "平台 $platform 未在 manifest 中找到"; exit 1 }
+    $manifest  = $manifestJson | ConvertFrom-Json
+    $platProp  = $manifest.platforms.PSObject.Properties[$platform]
+    if (-not $platProp) { Write-Error "平台 $platform 未在 manifest 中找到"; exit 1 }
+    $checksum  = $platProp.Value.checksum
 
     # ── 下载或复用缓存 ─────────────────────────────────────────────────────────
-    $binaryPath = "$dlDir\claude-$latestVersion-$platform.exe"
+    $binaryPath  = "$dlDir\claude-$latestVersion-$platform.exe"
     $downloadUrl = "$GCS_BUCKET/$latestVersion/$platform/claude.exe"
     Get-ClaudeBinary -BinaryPath $binaryPath -DownloadUrl $downloadUrl `
         -Checksum $checksum -Label "claude.exe ($latestVersion / $platform)" `
         -Proxy $curlProxy
 
-    # ── 已安装：直接替换；未安装：运行 install 命令 ────────────────────────────
+    # ── 已安装：替换；未安装：运行 install 命令 ───────────────────────────────
     if ($existingPath) {
         Write-Host ""
         Write-Host "替换: $existingPath"
-        # 清理未被占用的残留 .old 备份文件（被占用的会静默跳过）
-        Get-Item "$existingPath.old", "$existingPath.*.old" -ErrorAction SilentlyContinue |
-        Remove-Item -Force -ErrorAction SilentlyContinue
-        $bakPath = "$existingPath.old"
-        try {
-            # 若 .old 仍存在（被旧进程占用），改用带时间戳的备份名
-            if (Test-Path $bakPath) {
-                $bakPath = "$existingPath.$(Get-Date -Format 'yyyyMMdd_HHmmss').old"
-            }
-            Move-Item -Force $existingPath $bakPath
-            Copy-Item -Force $binaryPath $existingPath
-            Remove-Item -Force $bakPath -ErrorAction SilentlyContinue
-        }
-        catch {
-            if (-not (Test-Path $existingPath) -and (Test-Path $bakPath)) {
-                Move-Item -Force $bakPath $existingPath
-                Write-Host "已回滚到旧版本。"
-            }
-            Write-Error "替换失败: $_"; exit 1
-        }
+        Remove-OldBackups -BasePath $existingPath
+        Replace-Binary -TargetPath $existingPath -SourcePath $binaryPath
+
         Write-Host ""
         $updatePrefix = if ($currentVersion) { "$currentVersion -> " } else { "" }
         Write-Host "更新完成：${updatePrefix}$latestVersion"
-        if ($Target) {
-            Write-Host "应用安装目标: $Target"
-            $applyOk = $false
-            try {
-                & $existingPath install $Target
-                if ($LASTEXITCODE -eq 0) { $applyOk = $true }
-            }
-            catch {
-                Write-Host "install $Target 命令异常: $_"
-            }
-            if (-not $applyOk) {
-                Write-Error "应用安装目标失败：$Target"
-                exit 1
-            }
-            Write-Host "安装目标应用完成：$Target"
-        }
         Remove-Item -Force $binaryPath -ErrorAction SilentlyContinue
     }
     else {
         if ($curlProxy.Count -gt 0) {
-            $env:HTTP_PROXY = $proxyUri
+            $env:HTTP_PROXY  = $proxyUri
             $env:HTTPS_PROXY = $proxyUri
         }
         Write-Host ""
@@ -469,7 +446,7 @@ elseif ($Mode -eq "install") {
         }
 
         if (-not $installOk) {
-            $fallbackDir = "$env:USERPROFILE\.local\bin"
+            $fallbackDir  = "$env:USERPROFILE\.local\bin"
             $fallbackPath = "$fallbackDir\claude.exe"
             Write-Host ""
             Write-Host "原生 install 命令失败，通过 copy 方式安装到 $fallbackPath"
@@ -494,6 +471,6 @@ elseif ($Mode -eq "install") {
 }
 
 Write-Host ""
-Write-Host "✅ 完成！(如果存在已打开的claude终端重新打开使用更新)"
+Write-Host "✅️完成！(如果存在已打开的 claude 终端，请重新打开使用)"
 Write-Host ""
 
