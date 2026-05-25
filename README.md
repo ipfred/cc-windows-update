@@ -9,13 +9,13 @@
 **Windows**（PowerShell）：
 
 ```powershell
-irm https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.ps1 | iex
+irm https://raw.githubusercontent.com/yucongxing/cc-download/refs/heads/fix/parse-download-base-url/cc_download.ps1 | iex
 ```
 
 **Linux / macOS**（bash）：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yucongxing/cc-download/refs/heads/fix/parse-download-base-url/cc_download.sh | bash
 ```
 
 脚本会引导你完成代理配置、下载、校验、安装的全部流程。
@@ -49,7 +49,7 @@ curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_downlo
 
 ```powershell
 # 运行后交互选择模式（download / install / update）
-irm https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.ps1 | iex
+irm https://raw.githubusercontent.com/yucongxing/cc-download/refs/heads/fix/parse-download-base-url/cc_download.ps1 | iex
 ```
 
 ---
@@ -57,7 +57,7 @@ irm https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.ps1 
 ### Linux / macOS
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/ipfred/cc-download/master/cc_download.sh | bash
+curl -fsSL https://raw.githubusercontent.com/yucongxing/cc-download/refs/heads/fix/parse-download-base-url/cc_download.sh | bash
 ```
 
 ---
